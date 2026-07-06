@@ -225,7 +225,13 @@ Context Data:
                 .strip()
             )
 
-            return json.loads(content)
+            result = json.loads(content)
+
+            print("\n========== QUESTION GENERATOR ==========")
+            print(json.dumps(result, indent=2))
+            print("========================================\n")
+
+            return result            
 
         except Exception as e:
 

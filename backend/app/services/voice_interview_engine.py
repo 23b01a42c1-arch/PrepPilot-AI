@@ -40,6 +40,15 @@ class VoiceInterviewEngine:
                 answer
             )
         )
+        result = engine.submit_answer(answer)
+
+        print("\n====================")
+        print("TRANSCRIPT:")
+        print(answer)
+
+        print("\nRESULT:")
+        print(result)
+        print("====================")
 
         if result["type"] != "completed":
 

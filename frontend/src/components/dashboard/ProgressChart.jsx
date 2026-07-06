@@ -6,6 +6,7 @@ import {
   LineElement,
   Tooltip,
   Legend,
+  Filler,
 } from "chart.js";
 
 import { Line } from "react-chartjs-2";
@@ -16,9 +17,9 @@ ChartJS.register(
   PointElement,
   LineElement,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 );
-
 export default function ProgressChart() {
   const data = {
     labels: ["Week 1", "Week 2", "Week 3", "Week 4"],

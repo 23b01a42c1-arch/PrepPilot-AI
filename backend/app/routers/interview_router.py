@@ -101,6 +101,9 @@ def generate_interview(
             context_data
         )
     )
+    print("\n========== QUESTIONS DATA ==========")
+    print(questions_data)
+    print("====================================\n")
 
     # Roadmap
 
@@ -110,6 +113,30 @@ def generate_interview(
             questions_data
         )
     )
+    print("\n========== ROADMAP ==========")
+
+    for i, q in enumerate(roadmap):
+        print(
+            i,
+            q["topic"],
+            q["difficulty"],
+            q["question"]
+        )
+
+    print("=============================\n")
+    print("\n========== ROADMAP ==========")
+    print("Total Questions:", len(roadmap))
+
+    for i, q in enumerate(roadmap):
+        print(
+            f"{i+1}. [{q['type']}] "
+            f"{q['topic']} | "
+            f"{q['difficulty']}"
+        )
+        print(q["question"])
+        print("-" * 80)
+
+    print("=============================")
     session_id, first_question = (
     session_manager.create_session(
         roadmap,

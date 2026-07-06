@@ -7,6 +7,10 @@ from app.routers.voice_router import router as voice_router
 from app.routers.report_router import router as report_router
 from app.routers.upload_voice_router import router as upload_voice_router
 from app.routers.auth_router import router as auth_router
+from app.routers.resume_analysis_router import (
+    router as resume_analysis_router
+)
+
 app = FastAPI(
     title="AI Interview Assistant",
     version="1.0.0"
@@ -24,6 +28,12 @@ app.include_router(
     resume_router,
     prefix="/resume",
     tags=["Resume"]
+)
+
+app.include_router(
+    resume_analysis_router,
+    prefix="/resume",
+    tags=["Resume Analysis"]
 )
 
 app.include_router(

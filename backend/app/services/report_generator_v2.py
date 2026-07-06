@@ -41,9 +41,12 @@ class ReportGeneratorV2:
 
         scores = [
 
+            (
+
             item["evaluation"].get(
-                "score",
-                0
+                "score")
+                or 0
+                
             )
 
             for item in history

@@ -8,6 +8,10 @@ import Register from "../pages/Register/Register";
 import Dashboard from "../pages/Dashboard/Dashboard";
 import InterviewSetup from "../pages/Interview/InterviewSetup";
 import InterviewSession from "../pages/Interview/InterviewSession";
+import ResumeAnalyzer from "../pages/ResumeAnalyzer/ResumeAnalyzer";
+import ResumeAnalysis from "../pages/ResumeAnalyzer/ResumeAnalysis";
+import InterviewReport from "../pages/Report/InterviewReport";
+
 
 export default function AppRoutes() {
   return (
@@ -45,6 +49,31 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+          path="/resume"
+          element={
+            <ProtectedRoute>
+              <ResumeAnalyzer />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/resume/analysis"
+          element={
+            <ProtectedRoute>
+              <ResumeAnalysis />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/report"
+          element={
+            <ProtectedRoute>
+              <InterviewReport />
+            </ProtectedRoute>
+          }
+        />
 
     </Routes>
   );
