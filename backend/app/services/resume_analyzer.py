@@ -14,75 +14,56 @@ client = Groq(
 class ResumeAnalyzer:
 
     def analyze_resume(self, resume_text):
-
         prompt = f"""
-You are an expert ATS resume parser and recruiter.
+        You are an ATS resume parser.
 
-Analyze the ENTIRE resume.
+        Read the complete resume and extract only information explicitly present in it.
 
-Extract skills from:
-- Skills section
-- Projects
-- Project technologies
-- Work experience
-- Certifications
-- Frameworks
-- Libraries
-- Databases
-- APIs
-- Cloud platforms
-- AI/ML technologies
+        Return ONLY one valid JSON object.
 
-Infer skills from project descriptions.
+        The JSON must have exactly these fields:
 
-Examples:
-- If a project uses LangChain, include LangChain as a skill.
-- If a project uses RAG, include RAG as a skill.
-- If a project uses FastAPI, include FastAPI as a skill.
-
-CRITICAL OUTPUT RULES:
-
-1. Return ONLY a valid JSON object.
-2. Do NOT use markdown.
-3. Do NOT include ```json.
-4. Do NOT include explanations.
-5. Do NOT include text before or after the JSON.
-6. Every field in the schema must be present.
-7. Use empty arrays when information is unavailable.
-8. Do not invent information.
-
-Return exactly this structure:
-
-{{
-    "name": "",
-    "skills": [],
-    "projects": [
         {{
-            "name": "",
-            "description": "",
-            "technologies": []
+        "name": "",
+        "skills": [],
+        "projects": [],
+        "experience": [],
+        "education": []
         }}
-    ],
-    "experience": [
+
+        Rules:
+        - Output valid JSON only.
+        - No markdown.
+        - No ```json.
+        - No explanations.
+        - Do not invent information.
+        - Include every project mentioned in the resume.
+        - Include all relevant technical skills found in skills, projects, experience, certifications, and technologies.
+        - Use empty arrays if a section is missing.
+
+        For each project use:
         {{
-            "role": "",
-            "company": "",
-            "skills_used": []
+        "name": "",
+        "description": "",
+        "technologies": []
         }}
-    ],
-    "education": [
+
+        For each experience entry use:
         {{
-            "degree": "",
-            "institution": ""
+        "role": "",
+        "company": "",
+        "skills_used": []
         }}
-    ]
-}}
 
-Resume:
+        For each education entry use:
+        {{
+        "degree": "",
+        "institution": ""
+        }}
 
-{resume_text}
-"""
-
+        Resume:
+        {resume_text}
+        """
         response = client.chat.completions.create(
             model="openai/gpt-oss-20b",
             messages=[
@@ -93,7 +74,7 @@ Resume:
             ],
             temperature=0,
             max_tokens=3000
-            
+    
         )
 
         print("========== GROQ RESPONSE ==========")
