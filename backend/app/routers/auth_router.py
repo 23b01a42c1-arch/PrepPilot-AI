@@ -6,6 +6,11 @@ from app.models.user import User
 from app.schemas.user import UserCreate, UserLogin
 from app.core.security import hash_password, verify_password
 from app.core.auth import create_access_token
+from app.core.auth import (
+    create_access_token,
+    SECRET_KEY,
+    ALGORITHM
+)
 
 router = APIRouter()
 
@@ -44,8 +49,7 @@ from jose import JWTError, jwt
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-SECRET_KEY = "CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_KEY"
-ALGORITHM = "HS256"
+
 
 
 @router.post("/login")
