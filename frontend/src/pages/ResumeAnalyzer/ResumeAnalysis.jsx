@@ -8,9 +8,18 @@ import {
   FaSearch,
 } from "react-icons/fa";
 
+
+
 export default function ResumeAnalysis() {
   const navigate = useNavigate();
   const { state } = useLocation();
+  console.log("========== RESUME ANALYSIS STATE ==========");
+  console.log(state);
+  console.log("match_percentage:", state?.match_percentage);
+  console.log("ats_score:", state?.ats_score);
+  console.log("readiness_score:", state?.readiness_score);
+  console.log("match_breakdown:", state?.match_breakdown);
+  console.log("==========================================");
 
   if (!state) {
     return (
