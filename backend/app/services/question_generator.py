@@ -1,7 +1,7 @@
 import json
 import os
 
-from groq import Groq
+from groq import Groq, RateLimitError, BadRequestError
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,6 +13,25 @@ client = Groq(
 
 class QuestionGenerator:
 
+    def _compact(self, data, max_chars=6000):
+        """
+        Convert large objects into a compact JSON string.
+        Prevents unnecessarily large prompts.
+        """
+        try:
+            text = json.dumps(
+                data,
+                ensure_ascii=False,
+                separators=(",", ":")
+            )
+        except Exception:
+            text = str(data)
+
+        if len(text) > max_chars:
+            text = text[:max_chars] + "...[truncated]"
+
+        return text
+
     def generate_questions(
         self,
         resume_data,
@@ -23,284 +42,287 @@ class QuestionGenerator:
     ):
 
         print("\n========== QUESTION GENERATOR START ==========")
-        print("Topics available:", topics_data is not None)
-        print("Resume data available:", resume_data is not None)
-        print("JD data available:", jd_data is not None)
-        print("Match data available:", match_data is not None)
-        print("Context data available:", context_data is not None)
+
+        print(
+            "Topics available:",
+            bool(topics_data)
+        )
+
+        print(
+            "Resume data available:",
+            bool(resume_data)
+        )
+
+        print(
+            "JD data available:",
+            bool(jd_data)
+        )
+
+        print(
+            "Match data available:",
+            bool(match_data)
+        )
+
+        print(
+            "Context data available:",
+            bool(context_data)
+        )
+
         print("==============================================")
 
-        # --------------------------------------------------
-        # SAFE DEFAULT
-        # --------------------------------------------------
+        # -------------------------------------------------
+        # Keep prompt size under control
+        # -------------------------------------------------
+
+        topics = self._compact(
+            topics_data,
+            5000
+        )
+
+        resume = self._compact(
+            resume_data,
+            7000
+        )
+
+        jd = self._compact(
+            jd_data,
+            5000
+        )
+
+        match = self._compact(
+            match_data,
+            4000
+        )
+
+        context = self._compact(
+            context_data,
+            6000
+        )
+
+        # -------------------------------------------------
+        # Compact output schema
+        # -------------------------------------------------
 
         schema = {
-            "type": "object",
-            "properties": {
-                "topics": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "topic": {
-                                "type": "string"
-                            },
-                            "questions": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "difficulty": {
-                                            "type": "string",
-                                            "enum": [
-                                                "easy",
-                                                "medium",
-                                                "hard"
-                                            ]
-                                        },
-                                        "question": {
-                                            "type": "string"
-                                        }
-                                    },
-                                    "required": [
-                                        "difficulty",
-                                        "question"
-                                    ],
-                                    "additionalProperties": False
-                                }
-                            }
+            "topics": [
+                {
+                    "topic": "string",
+                    "questions": [
+                        {
+                            "difficulty": "easy",
+                            "question": "string"
                         },
-                        "required": [
-                            "topic",
-                            "questions"
-                        ],
-                        "additionalProperties": False
-                    }
-                },
-
-                "project_questions": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-
-                "behavioral_questions": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-
-                "missing_skill_questions": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                        {
+                            "difficulty": "medium",
+                            "question": "string"
+                        },
+                        {
+                            "difficulty": "hard",
+                            "question": "string"
+                        }
+                    ]
                 }
-            },
-
-            "required": [
-                "topics",
-                "project_questions",
-                "behavioral_questions",
-                "missing_skill_questions"
             ],
-
-            "additionalProperties": False
+            "project_questions": [
+                "string",
+                "string",
+                "string"
+            ],
+            "behavioral_questions": [
+                "string",
+                "string",
+                "string"
+            ],
+            "missing_skill_questions": [
+                "string"
+            ]
         }
-
-        # --------------------------------------------------
-        # PROMPT
-        # --------------------------------------------------
 
         prompt = f"""
 You are a senior technical interviewer.
 
-Generate a personalized interview question plan.
+Create a personalized interview question plan.
 
-IMPORTANT:
-Return ONLY valid JSON.
-Do not use markdown.
-Do not use ```json.
-Do not add explanations outside JSON.
+RETURN ONLY JSON.
+DO NOT use markdown.
+DO NOT use ```json.
+DO NOT add explanations before or after JSON.
 
-The output MUST follow the provided JSON schema.
+OUTPUT FORMAT:
+
+{json.dumps(schema, separators=(",", ":"))}
 
 RULES:
 
-1. Use ONLY topics present in Topics Data.
+1. Use only topics provided in Topics Data.
 
-2. For every topic generate:
-   - exactly 1 easy question
-   - exactly 1 medium question
-   - exactly 1 hard question
+2. For every topic generate exactly:
+- 1 easy question
+- 1 medium question
+- 1 hard question
 
-3. Questions must be personalized using:
-   - candidate projects
-   - internship experience
-   - technologies
-   - resume evidence
-   - job description
+3. Technical questions must reference evidence from:
+- resume
+- projects
+- internship
+- technologies
+- JD requirements
 
-4. NEVER ask generic definition questions when resume evidence exists.
+4. Avoid generic textbook questions when resume evidence exists.
 
-Bad:
+BAD:
 "What is RAG?"
 
-Bad:
-"What is FastAPI?"
+GOOD:
+"In your PDF Question Answering project, how did you use RAG and Qdrant to retrieve relevant document chunks?"
 
-Bad:
-"What is NLP?"
+5. Difficulty:
 
-Good:
-"In your Retrieval-Augmented PDF Question Answering Application, how did LangChain and Qdrant work together during retrieval?"
+EASY:
+Implementation, workflow, practical usage.
 
-5. EASY questions should focus on:
-   - implementation
-   - workflow
-   - practical usage
-   - architecture components
+MEDIUM:
+Architecture, debugging, design decisions, tradeoffs.
 
-6. MEDIUM questions should focus on:
-   - design decisions
-   - tradeoffs
-   - debugging
-   - architecture choices
-   - technology selection
+HARD:
+Scaling, optimization, reliability, production architecture.
 
-7. HARD questions should focus on:
-   - production systems
-   - scaling
-   - optimization
-   - fault tolerance
-   - monitoring
-   - distributed architecture
+6. Generate exactly:
+- 3 project questions
+- 3 behavioral questions
+- 1 question for each missing skill.
 
-8. Evidence rules:
+7. Avoid duplicates.
 
-If project evidence exists:
-ask implementation-focused questions.
+8. Questions must sound like a real senior-engineer interview.
 
-If internship evidence exists:
-ask production-focused questions.
+9. Behavioral questions should use the candidate's actual experience where possible.
 
-If both exist:
-combine project and production perspectives.
+10. Do not invent projects, internships, technologies or experience.
 
-If only skills exist:
-ask practical engineering questions.
+TOPICS:
+{topics}
 
-9. Generate exactly:
-   - 3 project questions
-   - 3 behavioral questions
-   - 1 question for every missing skill
+RESUME:
+{resume}
 
-10. Avoid duplicate questions.
+JOB DESCRIPTION:
+{jd}
 
-11. Questions must sound like a real senior engineering interview.
+MATCH:
+{match}
 
-12. Every technical question must reference at least one:
-   - project
-   - internship
-   - technology from resume
-
-13. Use Context Data heavily.
-
-14. Prefer engineering and implementation questions over textbook theory.
-
-TOPICS DATA:
-{json.dumps(topics_data, ensure_ascii=False)}
-
-RESUME DATA:
-{json.dumps(resume_data, ensure_ascii=False)}
-
-JD DATA:
-{json.dumps(jd_data, ensure_ascii=False)}
-
-MATCH DATA:
-{json.dumps(match_data, ensure_ascii=False)}
-
-CONTEXT DATA:
-{json.dumps(context_data, ensure_ascii=False)}
+CONTEXT:
+{context}
 """
-
-        # --------------------------------------------------
-        # GROQ REQUEST
-        # --------------------------------------------------
 
         try:
 
+            print(
+                "\nCalling Groq question generation..."
+            )
+
             response = client.chat.completions.create(
-
-                model="openai/gpt-oss-20b",
-
+                model="llama-3.1-8b-instant",
                 messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a senior technical interviewer. "
+                            "Return only valid JSON."
+                        )
+                    },
                     {
                         "role": "user",
                         "content": prompt
                     }
                 ],
-
                 temperature=0.2,
+                max_tokens=5000
+            )
 
-                max_completion_tokens=8000,
+            content = (
+                response
+                .choices[0]
+                .message
+                .content
+                .strip()
+            )
 
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "interview_questions",
-                        "strict": True,
-                        "schema": schema
-                    }
-                },
+            print(
+                "\n========== RAW GROQ RESPONSE =========="
+            )
+            print(content)
+            print(
+                "========================================"
+            )
 
-                reasoning_format="hidden"
+        except RateLimitError as e:
 
+            print(
+                "\n========== GROQ RATE LIMIT =========="
+            )
+            print(str(e))
+            print(
+                "====================================="
+            )
+
+            raise RuntimeError(
+                "Groq API rate limit reached. "
+                "Please wait for the quota to reset and try again."
+            )
+
+        except BadRequestError as e:
+
+            print(
+                "\n========== GROQ BAD REQUEST =========="
+            )
+            print(str(e))
+            print(
+                "======================================"
+            )
+
+            raise RuntimeError(
+                f"Groq rejected the question generation request: {str(e)}"
             )
 
         except Exception as e:
 
-            print("\n========== GROQ API ERROR ==========")
+            print(
+                "\n========== GROQ QUESTION GENERATOR ERROR =========="
+            )
             print(type(e).__name__)
             print(str(e))
-            print("====================================\n")
+            print(
+                "===================================================="
+            )
 
             raise RuntimeError(
                 f"Question generation failed: {str(e)}"
             )
 
-        # --------------------------------------------------
-        # READ RESPONSE
-        # --------------------------------------------------
+        # -------------------------------------------------
+        # Clean JSON
+        # -------------------------------------------------
 
-        try:
+        content = content.strip()
 
-            content = response.choices[0].message.content
-
-            if not content:
-                raise ValueError(
-                    "Groq returned an empty response."
-                )
-
-            print("\n========== RAW GROQ RESPONSE ==========")
-            print(content)
-            print("========================================")
-
-        except Exception as e:
-
-            print("\n========== GROQ RESPONSE ERROR ==========")
-            print(str(e))
-            print("==========================================")
-
-            raise RuntimeError(
-                "Groq returned an invalid response."
+        if content.startswith("```"):
+            content = content.replace(
+                "```json",
+                ""
             )
 
-        # --------------------------------------------------
-        # PARSE JSON
-        # --------------------------------------------------
+            content = content.replace(
+                "```",
+                ""
+            )
+
+            content = content.strip()
+
+        # -------------------------------------------------
+        # Parse JSON
+        # -------------------------------------------------
 
         try:
 
@@ -308,36 +330,59 @@ CONTEXT DATA:
 
         except json.JSONDecodeError as e:
 
-            print("\n========== JSON PARSE ERROR ==========")
-            print(str(e))
-            print("\nRAW RESPONSE:")
-            print(content)
-            print("======================================")
-
-            raise RuntimeError(
-                "Groq returned invalid JSON."
+            print(
+                "\n========== QUESTION JSON ERROR =========="
             )
 
-        # --------------------------------------------------
-        # VALIDATE BASIC STRUCTURE
-        # --------------------------------------------------
+            print(
+                "Error:",
+                str(e)
+            )
 
-        required_keys = [
-            "topics",
-            "project_questions",
-            "behavioral_questions",
-            "missing_skill_questions"
-        ]
+            print(
+                "RAW RESPONSE:"
+            )
 
-        for key in required_keys:
+            print(content)
 
-            if key not in result:
+            print(
+                "========================================="
+            )
 
-                raise RuntimeError(
-                    f"Question generator response missing key: {key}"
-                )
+            raise RuntimeError(
+                "Groq returned invalid JSON for interview questions."
+            )
 
-        print("\n========== QUESTION GENERATOR SUCCESS ==========")
+        # -------------------------------------------------
+        # Basic validation
+        # -------------------------------------------------
+
+        if not isinstance(result, dict):
+
+            raise RuntimeError(
+                "Question generator returned an invalid response."
+            )
+
+        if "topics" not in result:
+
+            result["topics"] = []
+
+        if "project_questions" not in result:
+
+            result["project_questions"] = []
+
+        if "behavioral_questions" not in result:
+
+            result["behavioral_questions"] = []
+
+        if "missing_skill_questions" not in result:
+
+            result["missing_skill_questions"] = []
+
+        print(
+            "\n========== QUESTION GENERATOR SUCCESS =========="
+        )
+
         print(
             json.dumps(
                 result,
@@ -345,6 +390,9 @@ CONTEXT DATA:
                 ensure_ascii=False
             )
         )
-        print("================================================\n")
+
+        print(
+            "================================================="
+        )
 
         return result

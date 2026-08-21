@@ -37,7 +37,7 @@ Job Description:
 """
 
         response = client.chat.completions.create(
-            model="openai/gpt-oss-20b",
+            model="llama-3.1-8b-instant",
             messages=[
                 {
                     "role": "user",
