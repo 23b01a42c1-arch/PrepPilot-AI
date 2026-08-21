@@ -50,153 +50,71 @@ class QuestionGenerator:
         }
 
         prompt = f"""
-You are a senior technical interviewer.
+    You are a senior technical interviewer.
 
-Generate a personalized interview plan.
+    Generate a personalized interview plan from the supplied candidate evidence.
 
-Return ONLY valid JSON.
+    Return ONLY valid JSON matching this structure:
 
-Schema:
+    {json.dumps(schema)}
 
-{json.dumps(schema, indent=2)}
+    IMPORTANT:
+    - Output JSON only.
+    - No markdown.
+    - No explanations.
+    - Do not add fields.
+    - Do not remove fields.
+    - Do not invent resume evidence.
+    - Keep every question concise.
+    - Avoid duplicate questions.
 
-Rules:
+    TOPIC QUESTIONS:
+    For every topic in Topics Data generate exactly:
+    - 1 easy
+    - 1 medium
+    - 1 hard
 
-1. Use ONLY topics from Topics Data.
+    QUESTION PERSONALIZATION:
+    Every technical question must use evidence from:
+    - candidate projects
+    - internship
+    - resume technologies
+    - JD requirements
 
-2. For EACH topic generate:
+    If project evidence exists, ask implementation questions.
+    If internship evidence exists, ask production/engineering questions.
+    If both exist, combine them.
 
-- 1 easy question
-- 1 medium question
-- 1 hard question
+    Do NOT ask generic definition questions when resume evidence exists.
 
-3. Questions MUST be personalized using:
+    Difficulty:
+    Easy = implementation, workflow, practical usage.
+    Medium = design decisions, tradeoffs, debugging, architecture.
+    Hard = scaling, optimization, reliability, monitoring, production architecture.
 
-- candidate projects
-- internship experience
-- technologies used
-- resume evidence
-- JD requirements
+    ALSO GENERATE:
+    - exactly 3 project questions
+    - exactly 3 behavioral questions
+    - exactly 1 question for each missing skill
 
-4. NEVER generate generic textbook questions.
+    Behavioral questions may use the candidate's actual projects/internship.
+    Missing-skill questions must target skills genuinely missing from Match Data.
 
-Forbidden Examples:
+    Topics Data:
+    {json.dumps(topics_data)}
 
-- What is NLP?
-- What is FastAPI?
-- What is RAG?
-- Explain Speech Recognition.
-- Define Question Answering.
+    Resume Data:
+    {json.dumps(resume_data)}
 
-These questions are NOT allowed when resume evidence exists.
+    JD Data:
+    {json.dumps(jd_data)}
 
-5. Difficulty Guidelines
+    Match Data:
+    {json.dumps(match_data)}
 
-EASY:
-
-If resume evidence exists:
-
-- ask about implementation
-- ask about workflow
-- ask about practical usage
-- ask about architecture components
-
-Examples:
-
-Good:
-In your Retrieval-Augmented PDF Question Answering Application, what role did LangChain and Qdrant play?
-
-Good:
-You used Deepgram ASR during your internship. Can you explain the flow from audio input to transcript generation?
-
-MEDIUM:
-
-- design decisions
-- tradeoffs
-- debugging
-- architecture choices
-- technology selection
-
-Examples:
-
-Good:
-How did you decide on your chunking strategy in the Retrieval-Augmented PDF QA Application, and what tradeoffs did you observe?
-
-Good:
-While integrating Deepgram ASR into your pipeline, what latency or accuracy challenges did you face and how did you solve them?
-
-HARD:
-
-- production systems
-- scaling
-- optimization
-- fault tolerance
-- monitoring
-- distributed architectures
-
-Examples:
-
-Good:
-How would you redesign your Retrieval-Augmented PDF QA Application to support one million documents and thousands of concurrent users?
-
-Good:
-Design a production-grade speech recognition platform capable of handling real-time audio streams from thousands of users simultaneously.
-
-6. Evidence Usage Rules
-
-For each topic:
-
-If project evidence exists:
-- generate implementation-focused questions
-
-If internship evidence exists:
-- generate production-focused questions
-
-If both exist:
-- combine project and production perspectives
-
-If only skills exist:
-- generate practical engineering questions
-
-7. Generate exactly:
-
-- 3 project questions
-- 3 behavioral questions
-- 1 question per missing skill
-
-8. Avoid duplicate questions.
-
-9. Questions should sound like a real technical interview conducted by a senior engineer.
-
-10. Every technical question MUST reference at least one of:
-
-- a project
-- an internship experience
-- a technology from the resume
-
-11. Use Context Data heavily.
-
-The Context Data contains the evidence that must be used to personalize questions.
-
-12. Prefer implementation and engineering questions over theory.
-
-13. Avoid asking definitions when project or internship evidence exists.
-
-Topics Data:
-{json.dumps(topics_data, indent=2)}
-
-Resume Data:
-{json.dumps(resume_data, indent=2)}
-
-JD Data:
-{json.dumps(jd_data, indent=2)}
-
-Match Data:
-{json.dumps(match_data, indent=2)}
-
-Context Data:
-{json.dumps(context_data, indent=2)}
-"""
+    Context Data:
+    {json.dumps(context_data)}
+    """
 
         response = client.chat.completions.create(
             model="openai/gpt-oss-20b",
@@ -206,24 +124,14 @@ Context Data:
                     "content": prompt
                 }
             ],
-            temperature=0.3
+            temperature=0.2,
+            response_format={"type": "json_object"},
+            max_tokens=5000
         )
 
-        content = (
-            response
-            .choices[0]
-            .message
-            .content
-        )
+        content = response.choices[0].message.content
 
         try:
-
-            content = (
-                content
-                .replace("```json", "")
-                .replace("```", "")
-                .strip()
-            )
 
             result = json.loads(content)
 
@@ -231,17 +139,17 @@ Context Data:
             print(json.dumps(result, indent=2))
             print("========================================\n")
 
-            return result            
+            return result
 
-        except Exception as e:
+        except json.JSONDecodeError as e:
 
-            print("\nQUESTION GENERATOR ERROR\n")
+            print("\nQUESTION GENERATOR JSON ERROR\n")
             print(e)
 
             print("\nRAW RESPONSE\n")
             print(content)
 
             return {
-                "error": str(e),
+                "error": "Invalid JSON returned by question generator",
                 "raw_response": content
             }
