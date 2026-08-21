@@ -1,9 +1,8 @@
 import json
 import os
-import re
 
-from dotenv import load_dotenv
 from groq import Groq
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -24,232 +23,211 @@ class QuestionGenerator:
     ):
 
         print("\n========== QUESTION GENERATOR START ==========")
-        print("Topics available:", topics_data if topics_data else "N/A")
-        print("Resume data available:", bool(resume_data))
-        print("JD data available:", bool(jd_data))
-        print("Match data available:", bool(match_data))
-        print("Context data available:", bool(context_data))
+        print("Topics available:", topics_data is not None)
+        print("Resume data available:", resume_data is not None)
+        print("JD data available:", jd_data is not None)
+        print("Match data available:", match_data is not None)
+        print("Context data available:", context_data is not None)
         print("==============================================")
 
         # --------------------------------------------------
-        # Normalize topics
-        # --------------------------------------------------
-
-        if isinstance(topics_data, dict):
-
-            topics = (
-                topics_data.get("topics")
-                or topics_data.get("technical_topics")
-                or topics_data.get("technology_topics")
-                or []
-            )
-
-        elif isinstance(topics_data, list):
-
-            topics = topics_data
-
-        else:
-
-            topics = []
-
-        # Convert topic objects into readable strings
-        normalized_topics = []
-
-        for topic in topics:
-
-            if isinstance(topic, str):
-
-                normalized_topics.append(topic)
-
-            elif isinstance(topic, dict):
-
-                name = (
-                    topic.get("topic")
-                    or topic.get("name")
-                    or topic.get("technology")
-                )
-
-                if name:
-                    normalized_topics.append(str(name))
-
-        # Remove duplicates
-        normalized_topics = list(
-            dict.fromkeys(normalized_topics)
-        )
-
-        # --------------------------------------------------
-        # Fallback topics
-        # --------------------------------------------------
-
-        if not normalized_topics:
-
-            normalized_topics = [
-                "Python",
-                "Machine Learning",
-                "TensorFlow",
-                "GitHub",
-                "MySQL",
-                "DBMS"
-            ]
-
-        print(
-            "Normalized topics:",
-            normalized_topics
-        )
-
-        # --------------------------------------------------
-        # Output schema
+        # SAFE DEFAULT
         # --------------------------------------------------
 
         schema = {
-            "topics": [
-                {
-                    "topic": "Python",
-                    "questions": [
-                        {
-                            "difficulty": "easy",
-                            "question": "Example question"
+            "type": "object",
+            "properties": {
+                "topics": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "topic": {
+                                "type": "string"
+                            },
+                            "questions": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "difficulty": {
+                                            "type": "string",
+                                            "enum": [
+                                                "easy",
+                                                "medium",
+                                                "hard"
+                                            ]
+                                        },
+                                        "question": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "difficulty",
+                                        "question"
+                                    ],
+                                    "additionalProperties": False
+                                }
+                            }
                         },
-                        {
-                            "difficulty": "medium",
-                            "question": "Example question"
-                        },
-                        {
-                            "difficulty": "hard",
-                            "question": "Example question"
-                        }
-                    ]
+                        "required": [
+                            "topic",
+                            "questions"
+                        ],
+                        "additionalProperties": False
+                    }
+                },
+
+                "project_questions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+
+                "behavioral_questions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+
+                "missing_skill_questions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
+            },
+
+            "required": [
+                "topics",
+                "project_questions",
+                "behavioral_questions",
+                "missing_skill_questions"
             ],
-            "project_questions": [
-                "Example project question"
-            ],
-            "behavioral_questions": [
-                "Example behavioral question"
-            ],
-            "missing_skill_questions": [
-                "Example missing skill question"
-            ]
+
+            "additionalProperties": False
         }
 
         # --------------------------------------------------
-        # Build prompt
+        # PROMPT
         # --------------------------------------------------
 
         prompt = f"""
 You are a senior technical interviewer.
 
-Create a personalized technical interview plan.
+Generate a personalized interview question plan.
 
 IMPORTANT:
 Return ONLY valid JSON.
-Do NOT use markdown.
-Do NOT use ```json.
-Do NOT add explanations before or after the JSON.
+Do not use markdown.
+Do not use ```json.
+Do not add explanations outside JSON.
 
-The JSON MUST follow this exact structure:
+The output MUST follow the provided JSON schema.
 
-{json.dumps(schema, indent=2)}
+RULES:
 
-INTERVIEW RULES:
+1. Use ONLY topics present in Topics Data.
 
-1. Use the candidate's resume heavily.
+2. For every topic generate:
+   - exactly 1 easy question
+   - exactly 1 medium question
+   - exactly 1 hard question
 
-2. Use the Job Description heavily.
+3. Questions must be personalized using:
+   - candidate projects
+   - internship experience
+   - technologies
+   - resume evidence
+   - job description
 
-3. Use Match Data and Context Data.
+4. NEVER ask generic definition questions when resume evidence exists.
 
-4. Questions must be personalized.
-
-5. Avoid generic textbook questions whenever resume evidence exists.
-
-6. For every topic generate exactly:
-
-- 1 easy question
-- 1 medium question
-- 1 hard question
-
-7. EASY questions should focus on:
-
-- implementation
-- workflow
-- practical usage
-- architecture components
-
-8. MEDIUM questions should focus on:
-
-- design decisions
-- tradeoffs
-- debugging
-- architecture choices
-- technology selection
-
-9. HARD questions should focus on:
-
-- scalability
-- optimization
-- production systems
-- fault tolerance
-- monitoring
-- distributed systems
-
-10. Generate exactly:
-
-- 3 project questions
-- 3 behavioral questions
-- 1 question for every missing skill
-
-11. Avoid duplicate questions.
-
-12. Technical questions should reference:
-
-- a project
-- internship experience
-- or a technology appearing in the resume
-
-13. Do not ask simple definitions when implementation evidence exists.
-
-BAD:
-"What is Python?"
-
-BAD:
-"What is TensorFlow?"
-
-BAD:
+Bad:
 "What is RAG?"
 
-GOOD:
-"How did you use TensorFlow when developing your CNN model, and what preprocessing steps were required before training?"
+Bad:
+"What is FastAPI?"
 
-GOOD:
-"How did you structure your Python code for your machine learning workflow?"
+Bad:
+"What is NLP?"
 
-GOOD:
-"How would you improve the scalability of your ML pipeline if the dataset increased significantly?"
+Good:
+"In your Retrieval-Augmented PDF Question Answering Application, how did LangChain and Qdrant work together during retrieval?"
 
-TOPICS:
+5. EASY questions should focus on:
+   - implementation
+   - workflow
+   - practical usage
+   - architecture components
 
-{json.dumps(normalized_topics, indent=2)}
+6. MEDIUM questions should focus on:
+   - design decisions
+   - tradeoffs
+   - debugging
+   - architecture choices
+   - technology selection
+
+7. HARD questions should focus on:
+   - production systems
+   - scaling
+   - optimization
+   - fault tolerance
+   - monitoring
+   - distributed architecture
+
+8. Evidence rules:
+
+If project evidence exists:
+ask implementation-focused questions.
+
+If internship evidence exists:
+ask production-focused questions.
+
+If both exist:
+combine project and production perspectives.
+
+If only skills exist:
+ask practical engineering questions.
+
+9. Generate exactly:
+   - 3 project questions
+   - 3 behavioral questions
+   - 1 question for every missing skill
+
+10. Avoid duplicate questions.
+
+11. Questions must sound like a real senior engineering interview.
+
+12. Every technical question must reference at least one:
+   - project
+   - internship
+   - technology from resume
+
+13. Use Context Data heavily.
+
+14. Prefer engineering and implementation questions over textbook theory.
+
+TOPICS DATA:
+{json.dumps(topics_data, ensure_ascii=False)}
 
 RESUME DATA:
+{json.dumps(resume_data, ensure_ascii=False)}
 
-{json.dumps(resume_data, indent=2, default=str)}
-
-JOB DESCRIPTION DATA:
-
-{json.dumps(jd_data, indent=2, default=str)}
+JD DATA:
+{json.dumps(jd_data, ensure_ascii=False)}
 
 MATCH DATA:
-
-{json.dumps(match_data, indent=2, default=str)}
+{json.dumps(match_data, ensure_ascii=False)}
 
 CONTEXT DATA:
-
-{json.dumps(context_data, indent=2, default=str)}
+{json.dumps(context_data, ensure_ascii=False)}
 """
 
         # --------------------------------------------------
-        # Call Groq
+        # GROQ REQUEST
         # --------------------------------------------------
 
         try:
@@ -260,13 +238,6 @@ CONTEXT DATA:
 
                 messages=[
                     {
-                        "role": "system",
-                        "content": (
-                            "You generate interview questions. "
-                            "Return only valid JSON."
-                        )
-                    },
-                    {
                         "role": "user",
                         "content": prompt
                     }
@@ -274,16 +245,44 @@ CONTEXT DATA:
 
                 temperature=0.2,
 
-                max_tokens=8000
+                max_completion_tokens=8000,
+
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "interview_questions",
+                        "strict": True,
+                        "schema": schema
+                    }
+                },
+
+                reasoning_format="hidden"
+
             )
 
-            content = (
-                response
-                .choices[0]
-                .message
-                .content
-                .strip()
+        except Exception as e:
+
+            print("\n========== GROQ API ERROR ==========")
+            print(type(e).__name__)
+            print(str(e))
+            print("====================================\n")
+
+            raise RuntimeError(
+                f"Question generation failed: {str(e)}"
             )
+
+        # --------------------------------------------------
+        # READ RESPONSE
+        # --------------------------------------------------
+
+        try:
+
+            content = response.choices[0].message.content
+
+            if not content:
+                raise ValueError(
+                    "Groq returned an empty response."
+                )
 
             print("\n========== RAW GROQ RESPONSE ==========")
             print(content)
@@ -291,30 +290,16 @@ CONTEXT DATA:
 
         except Exception as e:
 
-            print(
-                "\n========== GROQ API ERROR =========="
-            )
-
-            print(type(e).__name__)
+            print("\n========== GROQ RESPONSE ERROR ==========")
             print(str(e))
+            print("==========================================")
 
-            print(
-                "===================================="
-            )
-
-            return self._fallback_result(
-                normalized_topics,
-                match_data
+            raise RuntimeError(
+                "Groq returned an invalid response."
             )
 
         # --------------------------------------------------
-        # Clean response
-        # --------------------------------------------------
-
-        content = self._clean_json(content)
-
-        # --------------------------------------------------
-        # Parse JSON
+        # PARSE JSON
         # --------------------------------------------------
 
         try:
@@ -323,329 +308,43 @@ CONTEXT DATA:
 
         except json.JSONDecodeError as e:
 
-            print(
-                "\n========== JSON PARSE ERROR =========="
-            )
-
+            print("\n========== JSON PARSE ERROR ==========")
             print(str(e))
-
-            print("\nCleaned response:")
+            print("\nRAW RESPONSE:")
             print(content)
+            print("======================================")
 
-            print(
-                "====================================="
+            raise RuntimeError(
+                "Groq returned invalid JSON."
             )
 
-            # Try extracting JSON object
-            extracted = self._extract_json(content)
+        # --------------------------------------------------
+        # VALIDATE BASIC STRUCTURE
+        # --------------------------------------------------
 
-            if extracted:
+        required_keys = [
+            "topics",
+            "project_questions",
+            "behavioral_questions",
+            "missing_skill_questions"
+        ]
 
-                try:
+        for key in required_keys:
 
-                    result = json.loads(extracted)
+            if key not in result:
 
-                except Exception:
-
-                    return self._fallback_result(
-                        normalized_topics,
-                        match_data
-                    )
-
-            else:
-
-                return self._fallback_result(
-                    normalized_topics,
-                    match_data
+                raise RuntimeError(
+                    f"Question generator response missing key: {key}"
                 )
 
-        # --------------------------------------------------
-        # Validate structure
-        # --------------------------------------------------
-
-        result = self._validate_result(
-            result,
-            normalized_topics
-        )
-
-        print(
-            "\n========== QUESTION GENERATOR SUCCESS =========="
-        )
-
+        print("\n========== QUESTION GENERATOR SUCCESS ==========")
         print(
             json.dumps(
                 result,
-                indent=2
+                indent=2,
+                ensure_ascii=False
             )
         )
-
-        print(
-            "=================================================="
-        )
-
-        return result
-
-    # ======================================================
-    # CLEAN JSON
-    # ======================================================
-
-    def _clean_json(self, content):
-
-        if not content:
-            return ""
-
-        content = content.strip()
-
-        # Remove markdown fences
-        content = re.sub(
-            r"^```json\s*",
-            "",
-            content,
-            flags=re.IGNORECASE
-        )
-
-        content = re.sub(
-            r"^```\s*",
-            "",
-            content
-        )
-
-        content = re.sub(
-            r"\s*```$",
-            "",
-            content
-        )
-
-        return content.strip()
-
-    # ======================================================
-    # EXTRACT JSON
-    # ======================================================
-
-    def _extract_json(self, content):
-
-        if not content:
-            return None
-
-        start = content.find("{")
-        end = content.rfind("}")
-
-        if start == -1 or end == -1:
-            return None
-
-        return content[start:end + 1]
-
-    # ======================================================
-    # VALIDATE
-    # ======================================================
-
-    def _validate_result(
-        self,
-        result,
-        topics
-    ):
-
-        if not isinstance(result, dict):
-
-            return self._fallback_result(
-                topics,
-                {}
-            )
-
-        result.setdefault(
-            "topics",
-            []
-        )
-
-        result.setdefault(
-            "project_questions",
-            []
-        )
-
-        result.setdefault(
-            "behavioral_questions",
-            []
-        )
-
-        result.setdefault(
-            "missing_skill_questions",
-            []
-        )
-
-        # Make sure topics is a list
-        if not isinstance(
-            result["topics"],
-            list
-        ):
-
-            result["topics"] = []
-
-        # Make sure every topic has questions
-        cleaned_topics = []
-
-        for topic in result["topics"]:
-
-            if not isinstance(
-                topic,
-                dict
-            ):
-                continue
-
-            topic_name = (
-                topic.get("topic")
-                or "Unknown"
-            )
-
-            questions = topic.get(
-                "questions",
-                []
-            )
-
-            if not isinstance(
-                questions,
-                list
-            ):
-                questions = []
-
-            cleaned_questions = []
-
-            for q in questions:
-
-                if not isinstance(
-                    q,
-                    dict
-                ):
-                    continue
-
-                question = q.get(
-                    "question"
-                )
-
-                difficulty = q.get(
-                    "difficulty",
-                    "medium"
-                )
-
-                if question:
-
-                    cleaned_questions.append(
-                        {
-                            "difficulty": difficulty,
-                            "question": str(question)
-                        }
-                    )
-
-            if cleaned_questions:
-
-                cleaned_topics.append(
-                    {
-                        "topic": str(topic_name),
-                        "questions": cleaned_questions
-                    }
-                )
-
-        result["topics"] = cleaned_topics
-
-        return result
-
-    # ======================================================
-    # FALLBACK
-    # ======================================================
-
-    def _fallback_result(
-        self,
-        topics,
-        match_data
-    ):
-
-        print(
-            "\n========== USING FALLBACK QUESTIONS =========="
-        )
-
-        fallback_topics = []
-
-        for topic in topics:
-
-            topic_name = str(topic)
-
-            fallback_topics.append(
-                {
-                    "topic": topic_name,
-                    "questions": [
-                        {
-                            "difficulty": "easy",
-                            "question": (
-                                f"How have you used "
-                                f"{topic_name} in your projects?"
-                            )
-                        },
-                        {
-                            "difficulty": "medium",
-                            "question": (
-                                f"What implementation challenges "
-                                f"did you face while working with "
-                                f"{topic_name}, and how did you solve them?"
-                            )
-                        },
-                        {
-                            "difficulty": "hard",
-                            "question": (
-                                f"How would you design a production-scale "
-                                f"system using {topic_name} while considering "
-                                f"performance, reliability, and scalability?"
-                            )
-                        }
-                    ]
-                }
-            )
-
-        missing_skills = []
-
-        if isinstance(
-            match_data,
-            dict
-        ):
-
-            missing_skills = (
-                match_data.get(
-                    "missing_skills",
-                    []
-                )
-            )
-
-        missing_questions = []
-
-        for skill in missing_skills:
-
-            missing_questions.append(
-                (
-                    f"You have limited experience with "
-                    f"{skill}. How would you learn and apply "
-                    f"it to an AI engineering project?"
-                )
-            )
-
-        result = {
-
-            "topics": fallback_topics,
-
-            "project_questions": [
-                "Explain one of your projects and the most difficult engineering problem you solved.",
-                "What design decision in one of your projects would you change today?",
-                "How would you improve one of your projects for production use?"
-            ],
-
-            "behavioral_questions": [
-                "Tell me about a technical problem that required significant debugging.",
-                "Describe a time when you had to learn a new technology quickly.",
-                "Tell me about a project where you had to make an important technical decision."
-            ],
-
-            "missing_skill_questions": missing_questions
-        }
-
-        print(
-            "Fallback generated successfully."
-        )
+        print("================================================\n")
 
         return result

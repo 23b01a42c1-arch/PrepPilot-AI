@@ -78,6 +78,9 @@ def generate_interview(
             resume_data
         )
     )
+    print("\n========== TOPICS DATA ==========")
+    print(topics_data)
+    print("=================================\n")
 
     # Resume Context
 
