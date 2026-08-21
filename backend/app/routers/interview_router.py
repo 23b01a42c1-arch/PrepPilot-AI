@@ -91,20 +91,30 @@ def generate_interview(
 
     # Questions
 
-    questions_data = (
-        QuestionGenerator()
-        .generate_questions(
-            resume_data,
-            jd_data,
-            match_data,
-            topics_data,
-            context_data
-        )
-    )
-    print("\n========== QUESTIONS DATA ==========")
-    print(questions_data)
-    print("====================================\n")
+    try:
 
+        questions_data = (
+            QuestionGenerator()
+            .generate_questions(
+                resume_data,
+                jd_data,
+                match_data,
+                topics_data,
+                context_data
+            )
+        )
+
+    except Exception as e:
+
+        print("\n========== QUESTION GENERATION FAILED ==========")
+        print(type(e).__name__)
+        print(str(e))
+        print("=================================================")
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Question generation failed: {str(e)}"
+        )
     # Roadmap
 
     roadmap = (
